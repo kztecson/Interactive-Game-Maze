@@ -1,5 +1,3 @@
-# Starting file
-
 import pygame
 from pygame.locals import *
 from OpenGL.GL import *
@@ -12,8 +10,11 @@ WALL_HEIGHT = 1.0
 MOVE_SPEED = 0.1
 TURN_SPEED = 2.0
 
+# improting texture files for walls and floor
+WALL_TEXTURE_FILE = "brown_age_by_darkwood67.jpg"
+FLOOR_TEXTURE_FILE = "old_paper_by_darkwood67.jpg"
+
 # 1 = Wall, 0 = Path, 2 = Start
-# will replace with random generator later
 maze_map = [
     [1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
     [1, 2, 0, 0, 0, 0, 1, 0, 0, 1],
@@ -27,7 +28,7 @@ maze_map = [
     [1, 1, 1, 1, 1, 1, 1, 1, 1, 1]
 ]
 
-# --- CUBE DATA (Vertices & Texture Coords) ---
+# --- CUBE DATA ---
 vertices = (
     (1, -1, -1), (1, 1, -1), (-1, 1, -1), (-1, -1, -1),
     (1, -1, 1), (1, 1, 1), (-1, -1, 1), (-1, 1, 1)
@@ -42,43 +43,41 @@ tex_coords = (
     (0,0), (1,0), (1,1), (0,1)
 )
 
-def create_dummy_texture():
-    """
-    Generates a simple 64x64 checkerboard texture byte array
-    """
-    textureData = []
-    for i in range(64):
-        for j in range(64):
-            if (i // 8 + j // 8) % 2 == 0:
-                textureData.extend([255, 255, 255]) # White
-            else:
-                textureData.extend([100, 100, 255]) # Blueish
-    
-    # Convert to bytes
-    return bytes(textureData)
+# Global variables to store texture IDs
+wall_tex_id = None
+floor_tex_id = None
 
-def load_texture():
-    """ Load the texture into OpenGL """
-    textureData = create_dummy_texture()
-    width = 64
-    height = 64
+def load_image_texture(filename):
+    """ Loads an image file and converts it to an OpenGL texture ID """
+    try:
+        textureSurface = pygame.image.load(filename)
+    except pygame.error as e:
+        print(f"Error loading {filename}: {e}")
+        print("Make sure the image file is in the same folder as this script!")
+        pygame.quit()
+        quit()
+
+    textureData = pygame.image.tostring(textureSurface, "RGB", 1)
+    width = textureSurface.get_width()
+    height = textureSurface.get_height()
 
     glEnable(GL_TEXTURE_2D)
     texid = glGenTextures(1)
 
     glBindTexture(GL_TEXTURE_2D, texid)
-    # Note: GL_RGB because our dummy texture has 3 channels
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, width, height,
                  0, GL_RGB, GL_UNSIGNED_BYTE, textureData)
 
+    # Set texture parameters to repeat (essential for the floor)
     glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT)
     glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT)
-    glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST)
-    glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST)
+    glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR) # Linear looks smoother
+    glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR)
+    
     return texid
 
 def draw_cube():
-    """ Draws a single textured cube """
+    """ Draws a single textured cube using the currently bound texture """
     glBegin(GL_QUADS)
     for surface in surfaces:
         for i, vertex in enumerate(surface):
@@ -87,7 +86,9 @@ def draw_cube():
     glEnd()
 
 def draw_maze():
-    """ Loops through the map and draws walls where '1' is found """
+    """ Loops through the map and draws walls """
+    glBindTexture(GL_TEXTURE_2D, wall_tex_id) # Bind the Wall Texture
+    
     rows = len(maze_map)
     cols = len(maze_map[0])
     
@@ -95,27 +96,36 @@ def draw_maze():
         for c in range(cols):
             if maze_map[r][c] == 1:
                 glPushMatrix()
+                # Translate to grid position (c = x, r = z)
                 glTranslatef(c * 2, 0, r * 2) 
                 draw_cube()
                 glPopMatrix()
 
 def draw_floor():
-    """ Draws a large quad for the ground """
-    glDisable(GL_TEXTURE_2D) # Turn off texture for the floor (or load a new one)
-    glColor3f(0.2, 0.2, 0.2) # Dark Gray
+    """ Draws a large quad for the ground with the floor texture """
+    glBindTexture(GL_TEXTURE_2D, floor_tex_id)
+    tile_count = 100 
+    
     glBegin(GL_QUADS)
+    glTexCoord2f(0, 0)
     glVertex3f(-100, -1, -100)
+    
+    glTexCoord2f(tile_count, 0)
     glVertex3f(100, -1, -100)
+    
+    glTexCoord2f(tile_count, tile_count)
     glVertex3f(100, -1, 100)
+    
+    glTexCoord2f(0, tile_count)
     glVertex3f(-100, -1, 100)
     glEnd()
-    glEnable(GL_TEXTURE_2D) # Turn texture back on for walls
-    glColor3f(1, 1, 1) # Reset color to white
 
 def main():
+    global wall_tex_id, floor_tex_id
+    
     pygame.init()
     pygame.display.set_mode(DISPLAY_SIZE, DOUBLEBUF | OPENGL)
-    pygame.display.set_caption("Maze HW Starter")
+    pygame.display.set_caption("Textured Maze Game")
 
     # OpenGL Setup
     glEnable(GL_DEPTH_TEST)
@@ -126,12 +136,11 @@ def main():
     gluPerspective(45, (DISPLAY_SIZE[0]/DISPLAY_SIZE[1]), 0.1, 50.0)
     glMatrixMode(GL_MODELVIEW)
 
-    # Load Texture
-    load_texture()
+    # Load Textures
+    wall_tex_id = load_image_texture(WALL_TEXTURE_FILE)
+    floor_tex_id = load_image_texture(FLOOR_TEXTURE_FILE)
 
     # Player State
-    # Start at (1, 1) in grid coords. 
-    # Since cubes are width 2, real world position is grid * 2.
     player_x = 1 * 2 
     player_z = 1 * 2
     player_yaw = 90 # Angle in degrees
@@ -159,21 +168,14 @@ def main():
             player_yaw += TURN_SPEED
 
         # Calculate Movement Vector
-        # OpenGL uses Radians. 
-        # sin/cos logic depends on how your 0 angle is aligned. 
         dx = math.sin(math.radians(player_yaw)) * MOVE_SPEED
         dz = -math.cos(math.radians(player_yaw)) * MOVE_SPEED
 
         if keys[pygame.K_UP] or keys[pygame.K_w]:
-            # Predict next position
             next_x = player_x + dx
             next_z = player_z + dz
-            
-            # Convert world coord to grid coord (divide by 2, round)
             grid_x = int(round(next_x / 2))
             grid_z = int(round(next_z / 2))
-
-            # Collision Check
             if maze_map[grid_z][grid_x] != 1:
                 player_x = next_x
                 player_z = next_z
@@ -181,26 +183,22 @@ def main():
         if keys[pygame.K_DOWN] or keys[pygame.K_s]:
             next_x = player_x - dx
             next_z = player_z - dz
-            
             grid_x = int(round(next_x / 2))
             grid_z = int(round(next_z / 2))
-
             if maze_map[grid_z][grid_x] != 1:
                 player_x = next_x
                 player_z = next_z
 
         # Camera Update
         glLoadIdentity()
-        
-        # Calculate target (where we are looking)
         target_x = player_x + math.sin(math.radians(player_yaw))
         target_z = player_z - math.cos(math.radians(player_yaw))
-
-        # gluLookAt(EyeX, EyeY, EyeZ,  TargetX, TargetY, TargetZ,  UpX, UpY, UpZ)
         gluLookAt(player_x, 0, player_z, target_x, 0, target_z, 0, 1, 0)
 
         # Render
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT)
+        
+        glColor3f(1, 1, 1) 
         
         draw_floor()
         draw_maze()
