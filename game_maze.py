@@ -39,6 +39,11 @@ surfaces = (
     (4,5,1,0), (1,5,7,2), (4,0,3,6)
 )
 
+normals = (
+    (0, 0, -1), (-1, 0, 0), (0, 0, 1), 
+    (1, 0, 0), (0, 1, 0), (0, -1, 0)
+)
+
 tex_coords = (
     (0,0), (1,0), (1,1), (0,1)
 )
@@ -79,9 +84,10 @@ def load_image_texture(filename):
 def draw_cube():
     """ Draws a single textured cube using the currently bound texture """
     glBegin(GL_QUADS)
-    for surface in surfaces:
-        for i, vertex in enumerate(surface):
-            glTexCoord2fv(tex_coords[i])
+    for i, surface in enumerate(surfaces):
+        glNormal3fv(normals[i])
+        for j, vertex in enumerate(surface):
+            glTexCoord2fv(tex_coords[j])
             glVertex3fv(vertices[vertex])
     glEnd()
 
@@ -107,6 +113,7 @@ def draw_floor():
     tile_count = 100 
     
     glBegin(GL_QUADS)
+    glNormal3f(0, 1, 0)
     glTexCoord2f(0, 0)
     glVertex3f(-100, -1, -100)
     
@@ -130,6 +137,26 @@ def main():
     # OpenGL Setup
     glEnable(GL_DEPTH_TEST)
     glEnable(GL_TEXTURE_2D)
+    
+    glEnable(GL_LIGHTING)
+    glEnable(GL_LIGHT0)
+    
+    glEnable(GL_COLOR_MATERIAL)
+    glColorMaterial(GL_FRONT_AND_BACK, GL_AMBIENT_AND_DIFFUSE)
+    
+    # Fog effect
+    glEnable(GL_FOG)
+    glFogfv(GL_FOG_COLOR, (0, 0, 0, 1)) # Black fog
+    glFogi(GL_FOG_MODE, GL_LINEAR)      # Linear fade
+    glFogf(GL_FOG_START, 2.0)           # Start fading 2 units away
+    glFogf(GL_FOG_END, 15.0)            # Complete darkness 15 units away
+    
+    # Light Source and Ambience
+    glLightfv(GL_LIGHT0, GL_AMBIENT, (0.1, 0.1, 0.1, 1.0))
+    glLightfv(GL_LIGHT0, GL_DIFFUSE, (0.8, 0.7, 0.6, 1.0))
+    glLightf(GL_LIGHT0, GL_CONSTANT_ATTENUATION, 0.1)
+    glLightf(GL_LIGHT0, GL_LINEAR_ATTENUATION, 0.1)
+    glLightf(GL_LIGHT0, GL_QUADRATIC_ATTENUATION, 0.05)
     
     # Perspective
     glMatrixMode(GL_PROJECTION)
@@ -170,12 +197,17 @@ def main():
         # Calculate Movement Vector
         dx = math.sin(math.radians(player_yaw)) * MOVE_SPEED
         dz = -math.cos(math.radians(player_yaw)) * MOVE_SPEED
+        buffer = 0.25 
 
         if keys[pygame.K_UP] or keys[pygame.K_w]:
             next_x = player_x + dx
             next_z = player_z + dz
-            grid_x = int(round(next_x / 2))
-            grid_z = int(round(next_z / 2))
+            check_x = next_x + math.copysign(buffer, dx)
+            check_z = next_z + math.copysign(buffer, dz)
+            
+            grid_x = int(round(check_x / 2))
+            grid_z = int(round(check_z / 2))
+            
             if maze_map[grid_z][grid_x] != 1:
                 player_x = next_x
                 player_z = next_z
@@ -183,14 +215,23 @@ def main():
         if keys[pygame.K_DOWN] or keys[pygame.K_s]:
             next_x = player_x - dx
             next_z = player_z - dz
-            grid_x = int(round(next_x / 2))
-            grid_z = int(round(next_z / 2))
+            
+            check_x = next_x - math.copysign(buffer, dx)
+            check_z = next_z - math.copysign(buffer, dz)
+            
+            grid_x = int(round(check_x / 2))
+            grid_z = int(round(check_z / 2))
+            
             if maze_map[grid_z][grid_x] != 1:
                 player_x = next_x
                 player_z = next_z
 
         # Camera Update
         glLoadIdentity()
+        
+        # Position the Light at the player's eye
+        glLightfv(GL_LIGHT0, GL_POSITION, (0, 0, 0, 1))
+
         target_x = player_x + math.sin(math.radians(player_yaw))
         target_z = player_z - math.cos(math.radians(player_yaw))
         gluLookAt(player_x, 0, player_z, target_x, 0, target_z, 0, 1, 0)
